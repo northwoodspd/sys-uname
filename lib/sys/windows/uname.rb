@@ -2,7 +2,12 @@
 
 require 'socket'
 require 'time'
-require 'win32ole'
+
+def using_ole
+  return false if ENV['DONT_USE_OLE']
+  require 'win32ole'
+  true
+end
 
 # The Sys module provides a namespace only.
 module Sys
@@ -81,29 +86,37 @@ module Sys
     # including it as part of the connection.
     #
     def self.version(host = Socket.gethostname)
-      cs = "winmgmts://#{host}/root/cimv2"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
+      if using_ole
+        cs = "winmgmts://#{host}/root/cimv2"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          ole = wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0)
+          str = "#{ole.Version} #{ole.BuildNumber}-"
+          "#{str}#{ole.ServicePackMajorVersion}"
+        end
       else
-        ole = wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0)
-        str = "#{ole.Version} #{ole.BuildNumber}-"
-        "#{str}#{ole.ServicePackMajorVersion}"
+        get_version_num
       end
     end
 
     # Returns the operating system name, e.g. "Microsoft Windows XP Home"
     #
     def self.sysname(host = Socket.gethostname)
-      cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
-      cs += "//#{host}/root/cimv2"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
+      if using_ole
+        cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
+        cs += "//#{host}/root/cimv2"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).Caption.strip
+        end
       else
-        wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).Caption.strip
+        get_os_name
       end
     end
 
@@ -111,28 +124,33 @@ module Sys
     # same as the system's hostname.
     #
     def self.nodename(host = Socket.gethostname)
-      cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
-      cs += "//#{host}/root/cimv2"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
+      if using_ole
+        cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
+        cs += "//#{host}/root/cimv2"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).CSName
+        end
       else
-        wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).CSName
+        get_os_name
       end
     end
 
     # Returns the CPU architecture, e.g. "x86"
     #
     def self.architecture(cpu_num = 0, host = Socket.gethostname)
-      cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
-      cs += "//#{host}/root/cimv2:Win32_Processor='cpu#{cpu_num}'"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
-      else
-        case wmi.Architecture
+      if using_ole
+        cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
+        cs += "//#{host}/root/cimv2:Win32_Processor='cpu#{cpu_num}'"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          case wmi.Architecture
           when 0
             'x86'
           when 1
@@ -147,6 +165,15 @@ module Sys
             'x86_64'
           else
             'unknown'
+          end
+        end
+      else
+        begin
+          cpu_architecture = RbConfig::CONFIG['target_cpu']
+        rescue Exception => err
+          raise Error, err
+        else
+          cpu_architecture
         end
       end
     end
@@ -158,15 +185,16 @@ module Sys
     # appears that MS doesn't necessarily patch this, either.
     #
     def self.machine(cpu_num = 0, host = Socket.gethostname)
-      cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
-      cs += "//#{host}/root/cimv2:Win32_Processor='cpu#{cpu_num}'"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
-      else
-        # Convert a family number into the equivalent string
-        case wmi.Family
+      if using_ole
+        cs = 'winmgmts:{impersonationLevel=impersonate,(security)}'
+        cs += "//#{host}/root/cimv2:Win32_Processor='cpu#{cpu_num}'"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          # Convert a family number into the equivalent string
+          case wmi.Family
           when 1
             'Other'
           when 3
@@ -385,6 +413,16 @@ module Sys
             'Video Processor'
           else
             'Unknown'
+          end
+        end
+      else
+        begin
+          cpu_architecture = RbConfig::CONFIG['target_cpu']
+        rescue Exception => err
+          raise Error, err
+        else
+          # Convert a family number into the equivalent string
+          cpu_architecture
         end
       end
     end
@@ -392,13 +430,17 @@ module Sys
     # Returns the release number, e.g. 5.1.2600.
     #
     def self.release(host = Socket.gethostname)
-      cs = "winmgmts://#{host}/root/cimv2"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
+      if using_ole
+        cs = "winmgmts://#{host}/root/cimv2"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).Version
+        end
       else
-        wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0).Version
+        get_version_num
       end
     end
 
@@ -407,71 +449,132 @@ module Sys
     # Please see the MSDN documentation for what each of these fields mean.
     #
     def self.uname(host = Socket.gethostname)
-      cs = "winmgmts://#{host}/root/cimv2"
-      begin
-        wmi = WIN32OLE.connect(cs)
-      rescue WIN32OLERuntimeError => err
-        raise Error, err
-      else
-        os = wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0)
+      if using_ole
+        cs = "winmgmts://#{host}/root/cimv2"
+        begin
+          wmi = WIN32OLE.connect(cs)
+        rescue WIN32OLERuntimeError => err
+          raise Error, err
+        else
+          os = wmi.InstancesOf('Win32_OperatingSystem').ItemIndex(0)
 
+          UnameStruct.new(
+            os.BootDevice,
+            os.BuildNumber,
+            os.BuildType,
+            os.Caption,
+            os.CodeSet,
+            os.CountryCode,
+            os.CreationClassName,
+            os.CSCreationClassName,
+            os.CSDVersion,
+            os.CSName,
+            os.CurrentTimeZone,
+            os.Debug,
+            os.Description,
+            os.Distributed,
+            os.EncryptionLevel,
+            os.ForegroundApplicationBoost,
+            convert(os.FreePhysicalMemory),
+            convert(os.FreeSpaceInPagingFiles),
+            convert(os.FreeVirtualMemory),
+            parse_ms_date(os.InstallDate),
+            parse_ms_date(os.LastBootUpTime),
+            parse_ms_date(os.LocalDateTime),
+            os.Locale,
+            os.Manufacturer,
+            os.MaxNumberOfProcesses,
+            convert(os.MaxProcessMemorySize),
+            os.Name,
+            os.NumberOfLicensedUsers,
+            os.NumberOfProcesses,
+            os.NumberOfUsers,
+            os.Organization,
+            os.OSLanguage,
+            os.OSProductSuite,
+            os.OSType,
+            os.OtherTypeDescription,
+            os.PlusProductID,
+            os.PlusVersionNumber,
+            os.Primary,
+            os.ProductType,
+            os.respond_to?(:QuantumLength) ? os.QuantumLength : nil,
+            os.respond_to?(:QuantumType) ? os.QuantumType : nil,
+            os.RegisteredUser,
+            os.SerialNumber,
+            os.ServicePackMajorVersion,
+            os.ServicePackMinorVersion,
+            convert(os.SizeStoredInPagingFiles),
+            os.Status,
+            os.SuiteMask,
+            os.SystemDevice,
+            os.SystemDirectory,
+            os.SystemDrive,
+            convert(os.TotalSwapSpaceSize),
+            convert(os.TotalVirtualMemorySize),
+            convert(os.TotalVisibleMemorySize),
+            os.Version,
+            os.WindowsDirectory
+          )
+        end
+      else
         UnameStruct.new(
-          os.BootDevice,
-          os.BuildNumber,
-          os.BuildType,
-          os.Caption,
-          os.CodeSet,
-          os.CountryCode,
-          os.CreationClassName,
-          os.CSCreationClassName,
-          os.CSDVersion,
-          os.CSName,
-          os.CurrentTimeZone,
-          os.Debug,
-          os.Description,
-          os.Distributed,
-          os.EncryptionLevel,
-          os.ForegroundApplicationBoost,
-          convert(os.FreePhysicalMemory),
-          convert(os.FreeSpaceInPagingFiles),
-          convert(os.FreeVirtualMemory),
-          parse_ms_date(os.InstallDate),
-          parse_ms_date(os.LastBootUpTime),
-          parse_ms_date(os.LocalDateTime),
-          os.Locale,
-          os.Manufacturer,
-          os.MaxNumberOfProcesses,
-          convert(os.MaxProcessMemorySize),
-          os.Name,
-          os.NumberOfLicensedUsers,
-          os.NumberOfProcesses,
-          os.NumberOfUsers,
-          os.Organization,
-          os.OSLanguage,
-          os.OSProductSuite,
-          os.OSType,
-          os.OtherTypeDescription,
-          os.PlusProductID,
-          os.PlusVersionNumber,
-          os.Primary,
-          os.ProductType,
-          os.respond_to?(:QuantumLength) ? os.QuantumLength : nil,
-          os.respond_to?(:QuantumType) ? os.QuantumType : nil,
-          os.RegisteredUser,
-          os.SerialNumber,
-          os.ServicePackMajorVersion,
-          os.ServicePackMinorVersion,
-          convert(os.SizeStoredInPagingFiles),
-          os.Status,
-          os.SuiteMask,
-          os.SystemDevice,
-          os.SystemDirectory,
-          os.SystemDrive,
-          convert(os.TotalSwapSpaceSize),
-          convert(os.TotalVirtualMemorySize),
-          convert(os.TotalVisibleMemorySize),
-          os.Version,
-          os.WindowsDirectory
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          0,
+          false,
+          '',
+          false,
+          0,
+          0,
+          0,
+          0,
+          0,
+          Time.now,
+          Time.now,
+          Time.now,
+          '',
+          '',
+          0,
+          0,
+          '',
+          0,
+          0,
+          0,
+          '',
+          0,
+          0,
+          0,
+          '',
+          0,
+          0,
+          false,
+          0,
+          0,
+          0,
+          '',
+          '',
+          0,
+          0,
+          '',
+          '',
+          0,
+          '',
+          '',
+          'C:',
+          0,
+          0,
+          0,
+          `ver`.strip,
+          ''
         )
       end
     end
@@ -495,5 +598,51 @@ module Sys
     end
 
     private_class_method :convert
+
+    def self.get_os_name
+      begin
+        host_os = RbConfig::CONFIG['host_os']
+      rescue Exception => err
+        raise Error, err
+      else
+        case host_os
+        when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
+          'Microsoft Windows'
+        when /darwin|mac os/
+          'Mac OS'
+        when /linux/
+          'Linux'
+        when /solaris|bsd/
+          'Unix'
+        else
+          'Unknown'
+        end
+      end
+    end
+
+    def self.get_version_num
+      begin
+        host_os = RbConfig::CONFIG['host_os']
+      rescue Exception => err
+        raise Error, err
+      else
+        case host_os
+        when /darwin|mac os/
+          # macOS version
+          `sw_vers -productVersion`.strip
+        when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
+          # Windows version
+          `ver`.strip
+        when /linux/
+          # Linux version
+          `lsb_release -r -s`.strip
+        when /solaris|bsd/
+          # Solaris or BSD version
+          `uname -r`.strip
+        else
+          'Unknown'
+        end
+      end
+    end
   end
 end

@@ -33,7 +33,15 @@ end
 
 RuboCop::RakeTask.new
 
+RSpec::Core::RakeTask.new(:spec_without_ole) do
+  ENV['DONT_USE_OLE'] = '1'
+end
+
+RSpec::Core::RakeTask.new(:spec_with_ole) do
+  ENV['DONT_USE_OLE'] = nil
+end
+
 desc "Run the test suite"
-RSpec::Core::RakeTask.new(:spec)
+task :spec => [:spec_with_ole, :spec_without_ole]
 
 task :default => :spec

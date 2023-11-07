@@ -9,4 +9,6 @@ RSpec.configure do |config|
   config.filter_run_excluding(:hpux) unless RbConfig::CONFIG['host_os'] =~ /hpux/i
   config.filter_run_excluding(:linux) unless RbConfig::CONFIG['host_os'] =~ /linux/i
   config.filter_run_excluding(:windows) unless Gem.win_platform?
+
+  puts "Running tests with#{'out' if ENV['DONT_USE_OLE']} OLE"
 end
